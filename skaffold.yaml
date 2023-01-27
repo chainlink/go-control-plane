@@ -1,0 +1,15 @@
+apiVersion: skaffold/v4beta2
+kind: Config
+metadata:
+  name: go-control-plane
+build:
+  artifacts:
+  - image: go-control-plane
+    docker:
+      dockerfile: Dockerfile
+  - image: envoy
+    docker:
+      dockerfile: Dockerfile.envoy
+manifests:
+  rawYaml:
+  - deployment.yaml

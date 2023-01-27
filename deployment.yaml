@@ -1,0 +1,52 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-control-plane
+  labels:
+    app: go-control-plane
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: go-control-plane
+  template:
+    metadata:
+      labels:
+        app: go-control-plane
+    spec:
+      containers:
+      - name: go-control-plane
+        image: go-control-plane
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: envoy-xds
+spec:
+  selector:
+    app: go-control-plane
+  ports:
+    - protocol: TCP
+      port: 18000
+      targetPort: 18000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: envoy
+  labels:
+    app: envoy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: envoy
+  template:
+    metadata:
+      labels:
+        app: envoy
+    spec:
+      containers:
+      - name: envoy
+        image: envoy
