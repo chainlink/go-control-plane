@@ -38,7 +38,7 @@ const (
 	RouteName    = "local_route"
 	ListenerName = "listener_0"
 	ListenerPort = 10000
-	UpstreamHost = "www.envoyproxy.io"
+	UpstreamHost = "notebook-sample-v1"
 	UpstreamPort = 80
 )
 
@@ -87,7 +87,7 @@ func makeRoute(routeName string, clusterName string) *route.RouteConfiguration {
 			Routes: []*route.Route{{
 				Match: &route.RouteMatch{
 					PathSpecifier: &route.RouteMatch_Prefix{
-						Prefix: "/",
+						Prefix: "/notebook/default/notebook-sample-v1",
 					},
 				},
 				Action: &route.Route_Route{
@@ -170,7 +170,7 @@ func makeConfigSource() *core.ConfigSource {
 }
 
 func GenerateSnapshot() *cache.Snapshot {
-	snap, _ := cache.NewSnapshot("1",
+	snap, _ := cache.NewSnapshot("2",
 		map[resource.Type][]types.Resource{
 			resource.ClusterType:  {makeCluster(ClusterName)},
 			resource.RouteType:    {makeRoute(RouteName, ClusterName)},
