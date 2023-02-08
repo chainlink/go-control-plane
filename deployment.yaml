@@ -18,11 +18,24 @@ spec:
       containers:
       - name: go-control-plane
         image: go-control-plane
+        #image: go-control-plane:ae121f7f4c92beb74930b331dc5dd9d0948cacb9126d490ea06477ebc6cd0d4f
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: envoy-xds
+  name: envoy-xds # xds-service
+spec:
+  selector:
+    app: go-control-plane
+  ports:
+    - protocol: TCP
+      port: 18000
+      targetPort: 18000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: xds-service
 spec:
   selector:
     app: go-control-plane
@@ -50,3 +63,4 @@ spec:
       containers:
       - name: envoy
         image: envoy
+        #image: envoy:3ffbe55d92689a7beae3182a186811802a207d5df84233f836bac569c3b14aff

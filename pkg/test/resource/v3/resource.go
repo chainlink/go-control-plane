@@ -45,7 +45,7 @@ const (
 	localhost = "127.0.0.1"
 
 	// XdsCluster is the cluster name for the control server (used by non-ADS set-up).
-	XdsCluster = "xds_cluster"
+	XdsCluster = "xds"
 
 	// AlsCluster is the clustername for gRPC access log service (ALS)
 	AlsCluster = "als_cluster"

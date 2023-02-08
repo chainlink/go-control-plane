@@ -12,6 +12,6 @@ ADD . .
 
 RUN go build -o /envoy-example-server ./internal/example/main/main.go
 
-CMD [ "/envoy-example-server" ]
+CMD [ "/envoy-example-server", "-debug", "-nodeID", "my-node" ]
 
 EXPOSE 18000

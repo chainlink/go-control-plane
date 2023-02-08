@@ -19,6 +19,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	cluster "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
@@ -100,6 +101,23 @@ func makeRoute(routeName string, clusterName string) *route.RouteConfiguration {
 						},
 					},
 				},
+			}, {
+				Match: &route.RouteMatch{
+					PathSpecifier: &route.RouteMatch_Prefix{
+						Prefix: "/",
+					},
+				},
+				Action: &route.Route_Route{
+					Route: &route.RouteAction{
+						ClusterSpecifier: &route.RouteAction_Cluster{
+							Cluster: "console",
+						},
+						UpgradeConfigs: []*route.RouteAction_UpgradeConfig{{
+							Enabled:     wrapperspb.Bool(true),
+							UpgradeType: "websocket",
+						}},
+					},
+				},
 			}},
 		}},
 	}
@@ -161,7 +179,7 @@ func makeConfigSource() *core.ConfigSource {
 			SetNodeOnFirstMessageOnly: true,
 			GrpcServices: []*core.GrpcService{{
 				TargetSpecifier: &core.GrpcService_EnvoyGrpc_{
-					EnvoyGrpc: &core.GrpcService_EnvoyGrpc{ClusterName: "xds_cluster"},
+					EnvoyGrpc: &core.GrpcService_EnvoyGrpc{ClusterName: "xds"},
 				},
 			}},
 		},
@@ -170,7 +188,7 @@ func makeConfigSource() *core.ConfigSource {
 }
 
 func GenerateSnapshot() *cache.Snapshot {
-	snap, _ := cache.NewSnapshot("2",
+	snap, _ := cache.NewSnapshot("7",
 		map[resource.Type][]types.Resource{
 			resource.ClusterType:  {makeCluster(ClusterName)},
 			resource.RouteType:    {makeRoute(RouteName, ClusterName)},
