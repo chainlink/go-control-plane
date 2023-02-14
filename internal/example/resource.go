@@ -35,26 +35,21 @@ import (
 )
 
 const (
-	ClusterName  = "example_proxy_cluster"
-	RouteName    = "local_route"
-	ListenerName = "listener_0"
 	ListenerPort = 10000
-	UpstreamHost = "notebook-sample-v1"
-	UpstreamPort = 80
 )
 
-func makeCluster(clusterName string) *cluster.Cluster {
+func makeClusterFromSvc(svcName string, upstreamPort uint32) *cluster.Cluster {
 	return &cluster.Cluster{
-		Name:                 clusterName,
+		Name:                 svcName,
 		ConnectTimeout:       durationpb.New(5 * time.Second),
 		ClusterDiscoveryType: &cluster.Cluster_Type{Type: cluster.Cluster_LOGICAL_DNS},
 		LbPolicy:             cluster.Cluster_ROUND_ROBIN,
-		LoadAssignment:       makeEndpoint(clusterName),
+		LoadAssignment:       makeEndpoint(svcName, svcName, upstreamPort),
 		DnsLookupFamily:      cluster.Cluster_V4_ONLY,
 	}
 }
 
-func makeEndpoint(clusterName string) *endpoint.ClusterLoadAssignment {
+func makeEndpoint(clusterName, upstreamHost string, upstreamPort uint32) *endpoint.ClusterLoadAssignment {
 	return &endpoint.ClusterLoadAssignment{
 		ClusterName: clusterName,
 		Endpoints: []*endpoint.LocalityLbEndpoints{{
@@ -65,9 +60,9 @@ func makeEndpoint(clusterName string) *endpoint.ClusterLoadAssignment {
 							Address: &core.Address_SocketAddress{
 								SocketAddress: &core.SocketAddress{
 									Protocol: core.SocketAddress_TCP,
-									Address:  UpstreamHost,
+									Address:  upstreamHost,
 									PortSpecifier: &core.SocketAddress_PortValue{
-										PortValue: UpstreamPort,
+										PortValue: upstreamPort,
 									},
 								},
 							},
@@ -79,51 +74,74 @@ func makeEndpoint(clusterName string) *endpoint.ClusterLoadAssignment {
 	}
 }
 
-func makeRoute(routeName string, clusterName string) *route.RouteConfiguration {
+func makeVirtualHost(routes []*route.Route) *route.RouteConfiguration {
 	return &route.RouteConfiguration{
-		Name: routeName,
+		Name: "local_route",
 		VirtualHosts: []*route.VirtualHost{{
 			Name:    "local_service",
 			Domains: []string{"*"},
-			Routes: []*route.Route{{
-				Match: &route.RouteMatch{
-					PathSpecifier: &route.RouteMatch_Prefix{
-						Prefix: "/notebook/default/notebook-sample-v1",
-					},
-				},
-				Action: &route.Route_Route{
-					Route: &route.RouteAction{
-						ClusterSpecifier: &route.RouteAction_Cluster{
-							Cluster: clusterName,
-						},
-						HostRewriteSpecifier: &route.RouteAction_HostRewriteLiteral{
-							HostRewriteLiteral: UpstreamHost,
-						},
-					},
-				},
-			}, {
-				Match: &route.RouteMatch{
-					PathSpecifier: &route.RouteMatch_Prefix{
-						Prefix: "/",
-					},
-				},
-				Action: &route.Route_Route{
-					Route: &route.RouteAction{
-						ClusterSpecifier: &route.RouteAction_Cluster{
-							Cluster: "console",
-						},
-						UpgradeConfigs: []*route.RouteAction_UpgradeConfig{{
-							Enabled:     wrapperspb.Bool(true),
-							UpgradeType: "websocket",
-						}},
-					},
-				},
-			}},
+			Routes:  routes,
 		}},
 	}
 }
 
-func makeHTTPListener(listenerName string, route string) *listener.Listener {
+func makeRouteInner(prefix, clusterName string) *route.Route {
+	return &route.Route{
+		Match: &route.RouteMatch{
+			PathSpecifier: &route.RouteMatch_Prefix{
+				Prefix: prefix,
+			},
+		},
+		Action: &route.Route_Route{
+			Route: &route.RouteAction{
+				ClusterSpecifier: &route.RouteAction_Cluster{
+					Cluster: clusterName,
+				},
+			},
+		},
+	}
+}
+
+func makeRouteInnerRW(prefix, clusterName string) *route.Route {
+	return &route.Route{
+		Match: &route.RouteMatch{
+			PathSpecifier: &route.RouteMatch_Prefix{
+				Prefix: prefix,
+			},
+		},
+		Action: &route.Route_Route{
+			Route: &route.RouteAction{
+				ClusterSpecifier: &route.RouteAction_Cluster{
+					Cluster: clusterName,
+				},
+				PrefixRewrite: "/",
+			},
+		},
+	}
+}
+
+func makeRouteInnerWS(prefix, clusterName string) *route.Route {
+	return &route.Route{
+		Match: &route.RouteMatch{
+			PathSpecifier: &route.RouteMatch_Prefix{
+				Prefix: prefix,
+			},
+		},
+		Action: &route.Route_Route{
+			Route: &route.RouteAction{
+				ClusterSpecifier: &route.RouteAction_Cluster{
+					Cluster: clusterName,
+				},
+				UpgradeConfigs: []*route.RouteAction_UpgradeConfig{{
+					Enabled:     wrapperspb.Bool(true),
+					UpgradeType: "websocket",
+				}},
+			},
+		},
+	}
+}
+
+func makeHTTPListener() *listener.Listener {
 	routerConfig, _ := anypb.New(&router.Router{})
 	// HTTP filter configuration
 	manager := &hcm.HttpConnectionManager{
@@ -132,7 +150,7 @@ func makeHTTPListener(listenerName string, route string) *listener.Listener {
 		RouteSpecifier: &hcm.HttpConnectionManager_Rds{
 			Rds: &hcm.Rds{
 				ConfigSource:    makeConfigSource(),
-				RouteConfigName: route,
+				RouteConfigName: "local_route",
 			},
 		},
 		HttpFilters: []*hcm.HttpFilter{{
@@ -146,7 +164,7 @@ func makeHTTPListener(listenerName string, route string) *listener.Listener {
 	}
 
 	return &listener.Listener{
-		Name: listenerName,
+		Name: "listener_0",
 		Address: &core.Address{
 			Address: &core.Address_SocketAddress{
 				SocketAddress: &core.SocketAddress{
@@ -188,11 +206,19 @@ func makeConfigSource() *core.ConfigSource {
 }
 
 func GenerateSnapshot() *cache.Snapshot {
-	snap, _ := cache.NewSnapshot("7",
+	streamlit := "pipeline-default-streamlit-v1-user"
+	notebook := "notebook-sample-v1"
+	routes := []*route.Route{
+		makeRouteInner("/notebook/default/notebook-sample-v1", notebook),
+		makeRouteInnerWS("/svc/default-streamlit", streamlit),
+		makeRouteInnerWS("/", "console"),
+	}
+
+	snap, _ := cache.NewSnapshot("13",
 		map[resource.Type][]types.Resource{
-			resource.ClusterType:  {makeCluster(ClusterName)},
-			resource.RouteType:    {makeRoute(RouteName, ClusterName)},
-			resource.ListenerType: {makeHTTPListener(ListenerName, RouteName)},
+			resource.ClusterType:  {makeClusterFromSvc(notebook, 80), makeClusterFromSvc(streamlit, 30888)},
+			resource.RouteType:    {makeVirtualHost(routes)}, //local_route must match listener
+			resource.ListenerType: {makeHTTPListener()},      //"local_route" must match route
 		},
 	)
 	return snap
